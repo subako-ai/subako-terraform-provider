@@ -1,4 +1,4 @@
-# subako-terraform-provider
+# terraform-provider-subako
 
 The Terraform provider for [Subako](https://subako.ai): a workspace's agents,
 skills, model providers, vaults, and vault credentials declared as a

@@ -1,0 +1,32 @@
+# Onboarding: mise trust && mise run test
+
+[tools]
+# go.mod's `toolchain` line is Go's own pin, and Go switches to it from any
+# older release, so the two name one version.
+# CODESYNC(go-toolchain)
+"go" = "1.27.1"
+# The suite drives a real Terraform binary through terraform-plugin-testing,
+# so the version here is what the write-only attribute tests run against.
+"terraform" = "1.16.0"
+
+[tasks.fmt]
+description = "Format Go sources"
+run = ["gofmt -w ."]
+
+# gofmt lists what it would change and exits 0 either way, so an empty list is
+# the check.
+[tasks."fmt:check"]
+description = "Verify formatting without writing"
+run = ["test -z \"$(gofmt -l .)\""]
+
+[tasks.lint]
+description = "Vet the module"
+run = ["go vet ./..."]
+
+[tasks.test]
+description = "Run the provider suite"
+run = ["go test ./..."]
+
+[tasks.build]
+description = "Build the release archives into target/"
+run = ["scripts/build.sh"]

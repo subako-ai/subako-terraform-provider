@@ -1,4 +1,4 @@
-module github.com/subako-ai/subako-terraform-provider
+module github.com/subako-ai/terraform-provider-subako
 
 go 1.25.8
 

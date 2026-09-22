@@ -47,11 +47,10 @@ git tag v0.1.0 && git push origin v0.1.0
 ```
 
 `scripts/build.sh` writes `terraform-provider-subako_<version>_<os>_<arch>.zip`
-and `terraform-provider-subako_<version>_SHA256SUMS`. The names keep the
-`terraform-provider-subako` spelling that Terraform's packed mirror layout
-requires, which is not this repository's name. Publishing to the Terraform
-Registry would need this repository renamed to `terraform-provider-subako` --
-the namespace already matches -- and its releases GPG-signed. `subako terraform` downloads
+and `terraform-provider-subako_<version>_SHA256SUMS`, the spelling Terraform's
+packed mirror layout requires. Publishing to the Terraform Registry needs only
+GPG-signed releases from here: the namespace and the repository name are both
+what the registry address `subako-ai/subako` asks for. `subako terraform` downloads
 exactly those names from the release page and checks each archive against the
 listed digest, so renaming an asset breaks the CLI.
 
@@ -59,7 +58,8 @@ The repository has to be public for that download to work without a token.
 
 ## License
 
-Apache License 2.0; see [LICENSE](LICENSE).
+Apache License 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE). The HashiCorp
+plugin libraries this links stay under their own MPL-2.0 terms.
 
 ## Where the other half lives
 

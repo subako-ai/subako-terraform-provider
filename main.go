@@ -8,7 +8,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 
-	"github.com/subako-ai/subako-terraform-provider/internal/provider"
+	"github.com/subako-ai/terraform-provider-subako/internal/provider"
 )
 
 // version is stamped at release build time with -ldflags.

@@ -4,8 +4,9 @@ The Terraform provider for [Subako](https://subako.ai): a workspace's agents,
 skills, model providers, vaults, and vault credentials declared as a
 configuration.
 
-The provider is published to the Terraform Registry as `subako-ai/subako`, so a
-configuration names it by that address rather than by this repository:
+It is not on the Terraform Registry. A configuration still names it by the
+registry address it would hold, `subako-ai/subako`, and `subako terraform`
+installs it from a mirror it fills from this repository's releases:
 
 ```hcl
 terraform {
@@ -38,16 +39,20 @@ pins. Write-only attributes need Terraform 1.11 or later.
 ## Releasing
 
 A tag `v<version>` builds one archive per platform and publishes them, with
-their checksum list, as that tag's GitHub release:
+their checksum list, as that tag's GitHub release. The line starts at 0.2.0:
+0.1.x was what shipped beside the Subako CLI, and no number is reused.
+`PROVIDER_VERSION` in the CLI is what pins which release it installs.
 
 ```sh
-git tag v0.1.9 && git push origin v0.1.9
+git tag v0.2.0 && git push origin v0.2.0
 ```
 
 `scripts/build.sh` writes `terraform-provider-subako_<version>_<os>_<arch>.zip`
 and `terraform-provider-subako_<version>_SHA256SUMS`. The names keep the
 `terraform-provider-subako` spelling that Terraform's packed mirror layout
-requires, which is not this repository's name. `subako terraform` downloads
+requires, which is not this repository's name. Publishing to the Terraform
+Registry would need both: a repository named `terraform-provider-subako`, under
+the `subako-ai` namespace, with GPG-signed releases. `subako terraform` downloads
 exactly those names from the release page and checks each archive against the
 listed digest, so renaming an asset breaks the CLI.
 

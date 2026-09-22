@@ -10,14 +10,17 @@
 "terraform" = "1.16.0"
 
 [tasks.fmt]
-description = "Format Go sources"
-run = ["gofmt -w ."]
+description = "Format Go sources and the example configuration"
+run = ["gofmt -w .", "terraform fmt -recursive examples"]
 
 # gofmt lists what it would change and exits 0 either way, so an empty list is
 # the check.
 [tasks."fmt:check"]
 description = "Verify formatting without writing"
-run = ["test -z \"$(gofmt -l .)\""]
+run = [
+  "test -z \"$(gofmt -l .)\"",
+  "terraform fmt -recursive -check -diff examples",
+]
 
 [tasks.lint]
 description = "Vet the module"

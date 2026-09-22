@@ -32,6 +32,7 @@ resource "subako_agent" "release" {
 
 Terraform 1.11 or later is required: credentials are passed as write-only
 arguments, so no secret is ever written to your state.
+[`examples/`](examples) is a working configuration using every resource below.
 
 ## Installing
 

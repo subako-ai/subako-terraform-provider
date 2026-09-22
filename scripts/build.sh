@@ -20,10 +20,9 @@ out="${2:-target}"
 out="$(mkdir -p "$out" && cd "$out" && pwd)"
 checksums="terraform-provider-subako_${version}_SHA256SUMS"
 
-# The platforms the Subako CLI is released for, as Terraform spells them. Its
-# own list lives in Kikuvi-Inc/subako under CODESYNC(cli-release-targets); a
-# platform here that the CLI has no build for is one `subako terraform` never
-# asks for, and one missing here is a download that 404s.
+# The platforms the Subako CLI is released for, as Terraform spells them. The
+# CLI installs the provider for the platform it runs on, so one missing here is
+# a download that 404s.
 platforms=(
 	darwin/amd64
 	darwin/arm64

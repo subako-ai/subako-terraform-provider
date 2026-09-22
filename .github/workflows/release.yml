@@ -1,8 +1,7 @@
 # Publishes the provider archives a tag names. `subako terraform` downloads
 # them from this release page and verifies each against the checksum list, so
-# the asset names scripts/build.sh writes are what the CLI asks for.
-#
-# The repository has to be public for that download to work unauthenticated.
+# the asset names scripts/build.sh writes are what it asks for: renaming one
+# breaks the install.
 
 name: Release
 

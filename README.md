@@ -50,12 +50,16 @@ git tag v0.1.0 && git push origin v0.1.0
 and `terraform-provider-subako_<version>_SHA256SUMS`. The names keep the
 `terraform-provider-subako` spelling that Terraform's packed mirror layout
 requires, which is not this repository's name. Publishing to the Terraform
-Registry would need both: a repository named `terraform-provider-subako`, under
-the `subako-ai` namespace, with GPG-signed releases. `subako terraform` downloads
+Registry would need this repository renamed to `terraform-provider-subako` --
+the namespace already matches -- and its releases GPG-signed. `subako terraform` downloads
 exactly those names from the release page and checks each archive against the
 listed digest, so renaming an asset breaks the CLI.
 
 The repository has to be public for that download to work without a token.
+
+## License
+
+Apache License 2.0; see [LICENSE](LICENSE).
 
 ## Where the other half lives
 

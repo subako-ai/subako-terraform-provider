@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 
-	"github.com/Kikuvi-Inc/subako-terraform-provider/internal/client"
+	"github.com/subako-ai/subako-terraform-provider/internal/client"
 )
 
 // clientFrom unwraps the client Configure handed over. Before Configure has

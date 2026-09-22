@@ -13,7 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/Kikuvi-Inc/subako-terraform-provider/internal/client"
+	"github.com/subako-ai/subako-terraform-provider/internal/client"
 )
 
 // Environment variables a provider block may leave its settings to. The

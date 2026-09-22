@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/Kikuvi-Inc/subako-terraform-provider/internal/client"
+	"github.com/subako-ai/subako-terraform-provider/internal/client"
 )
 
 // anAgent is an agent holding one version's config, granting nothing.

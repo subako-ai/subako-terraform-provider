@@ -6,7 +6,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 
-	"github.com/Kikuvi-Inc/subako-terraform-provider/internal/client"
+	"github.com/subako-ai/subako-terraform-provider/internal/client"
 )
 
 // Every resource here has the same shape: a server call or two that change

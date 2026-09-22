@@ -53,12 +53,6 @@ installs it. Every other provider in your configuration installs as usual. It
 also mints a short-lived API key for the run and revokes it when Terraform
 exits, so there is nothing to rotate afterwards.
 
-To run Terraform yourself instead, download a release from this repository, lay
-the archive out as a [filesystem
-mirror](https://developer.hashicorp.com/terraform/cli/config/config-file#filesystem_mirror)
-under `registry.terraform.io/subako-ai/subako/`, and point your CLI
-configuration at it.
-
 ## Authenticating
 
 The `provider "subako"` block reads three settings, each falling back to an
@@ -97,10 +91,6 @@ configuration can never spend credit.
 | --- | --- |
 | `subako_model_providers` | Every model provider the workspace can use, including the ones Subako publishes |
 | `subako_workspace` | The workspace the credential acts in |
-
-Workspaces, members, and API keys are deliberately not managed here: they need
-organization-level authority, and a key created by Terraform would have to live
-in your state.
 
 ### Secrets stay out of your state
 

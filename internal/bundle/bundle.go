@@ -2,7 +2,7 @@
 // skill upload routes take, and fingerprints a bundle so a local directory
 // and a stored version compare without downloading either.
 //
-// What goes into the archive mirrors crates/subako-cli/src/bundle.rs: every
+// What goes into the archive mirrors what `subako skill push` packs: every
 // regular file under the directory under its "/"-joined relative path, a
 // symlink refused rather than followed, anything else passed over, the same
 // caps, and headers fixed so the same content always packs to the same bytes.
@@ -24,7 +24,7 @@ import (
 	"sort"
 )
 
-// Limits a bundle must keep, mirroring core_domain::skill::bundle.
+// Limits a bundle must keep, as the server enforces them.
 const (
 	// CODESYNC(skill-bundle-caps)
 	MaxFileBytes = 10 * 1024 * 1024
@@ -51,7 +51,7 @@ type Bundle struct {
 
 // Read walks dir into a Bundle and checks it against the limits. dir itself
 // may be a symlink; nothing under it may. The caps are checked in the order
-// core_domain::skill::bundle checks them -- each file's own size, then the
+// the server checks them -- each file's own size, then the
 // file count, then the total -- so a directory over more than one of them
 // draws the same answer here as from the server.
 func Read(dir string) (*Bundle, error) {

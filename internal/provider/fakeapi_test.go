@@ -20,8 +20,7 @@ import (
 )
 
 // fakeAPI is an in-memory stand-in for the subset of `/v1` the provider
-// calls, keeping the wire shapes crates/core-server/openapi/public.json
-// documents.
+// calls, keeping the wire shapes the server's `/openapi.json` documents.
 type fakeAPI struct {
 	mu sync.Mutex
 

@@ -28,8 +28,8 @@ const (
 	envCLI = "SUBAKO_CLI"
 )
 
-// DefaultServer is the API a provider block reaches when it names none.
-// CODESYNC(default-server)
+// DefaultServer is the API a provider block reaches when nothing names one:
+// the one the Subako CLI signs in to by default.
 const DefaultServer = "https://api.us.cloud.subako.ai"
 
 var _ provider.Provider = (*subakoProvider)(nil)

@@ -15,8 +15,6 @@ import (
 var version = "dev"
 
 // Address is the registry address configurations name the provider by.
-//
-// CODESYNC(terraform-provider-address)
 const Address = "registry.terraform.io/subako-ai/subako"
 
 func main() {

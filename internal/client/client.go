@@ -1,5 +1,6 @@
 // Package client speaks the Subako public API: the subset of `/v1` the
-// provider manages. Shapes mirror crates/core-server/openapi/public.json.
+// provider manages. Shapes mirror the document the server publishes at
+// `/openapi.json`.
 package client
 
 import (

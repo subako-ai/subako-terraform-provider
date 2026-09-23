@@ -58,7 +58,6 @@ func (s staticAuth) boundToAWorkspace() bool { return s.apiKey }
 // Issued is what the Subako CLI's `token` command prints: the signed-in
 // user's server, an access token and when it lapses, and the workspace
 // `subako workspace use` selected, when one is.
-// CODESYNC(token-output)
 type Issued struct {
 	Version       int       `json:"version"`
 	Server        string    `json:"server"`
@@ -68,8 +67,8 @@ type Issued struct {
 	WorkspaceName string    `json:"workspace_name"`
 }
 
-// The output version this provider reads.
-// CODESYNC(token-output)
+// The output version this provider reads. The CLI moves it when a field is
+// removed or changes meaning, not when one is added.
 const issuedVersion = 1
 
 // renewalMargin is how little of a token's life may be left before the CLI

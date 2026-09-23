@@ -12,9 +12,18 @@ import (
 	"testing"
 )
 
+func static(t *testing.T, token string) Auth {
+	t.Helper()
+	auth, err := Static(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return auth
+}
+
 func testClient(t *testing.T, server *httptest.Server, token string) *Client {
 	t.Helper()
-	c, err := New(Config{Server: server.URL, Token: token, WorkspaceID: "ws-1", UserAgent: "test/1"})
+	c, err := New(Config{Server: server.URL, Auth: static(t, token), WorkspaceID: "ws-1", UserAgent: "test/1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,16 +33,15 @@ func testClient(t *testing.T, server *httptest.Server, token string) *Client {
 
 func TestNewRefusesWhatCannotReachAServer(t *testing.T) {
 	for name, cfg := range map[string]Config{
-		"no scheme":            {Server: "api.example.test", Token: "sbk_ak_x"},
+		"no scheme":            {Server: "api.example.test", Auth: static(t, "sbk_ak_x")},
 		"no token":             {Server: "https://api.example.test"},
-		"unknown token":        {Server: "https://api.example.test", Token: "abc"},
-		"user without a space": {Server: "https://api.example.test", Token: "sbk_at_x"},
+		"user without a space": {Server: "https://api.example.test", Auth: static(t, "sbk_at_x")},
 	} {
 		if _, err := New(cfg); err == nil {
 			t.Errorf("%s: New succeeded", name)
 		}
 	}
-	if _, err := New(Config{Server: "https://api.example.test/", Token: "sbk_ak_x"}); err != nil {
+	if _, err := New(Config{Server: "https://api.example.test/", Auth: static(t, "sbk_ak_x")}); err != nil {
 		t.Errorf("an API key needs no workspace: %v", err)
 	}
 }
@@ -86,7 +94,7 @@ func TestAClientWithoutAWorkspaceSendsNoWorkspaceHeader(t *testing.T) {
 		_, _ = io.WriteString(w, `{"id":"a1"}`)
 	}))
 	defer server.Close()
-	c, err := New(Config{Server: server.URL, Token: "sbk_ak_key"})
+	c, err := New(Config{Server: server.URL, Auth: static(t, "sbk_ak_key")})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -43,7 +43,7 @@ const (
 // Client is one configured connection to a Subako server.
 type Client struct {
 	base        *url.URL
-	token       string
+	auth        Auth
 	workspaceID string
 	userAgent   string
 	// The two retry policies a request is sent under, picked by its method.
@@ -54,7 +54,7 @@ type Client struct {
 // Config is what a Client needs to reach a server.
 type Config struct {
 	Server string
-	Token  string
+	Auth   Auth
 	// WorkspaceID names the workspace collection routes act in. A user token
 	// needs one; an API key implies its own.
 	WorkspaceID string
@@ -67,22 +67,16 @@ func New(cfg Config) (*Client, error) {
 	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" {
 		return nil, fmt.Errorf("server must be an http(s) URL, got %q", cfg.Server)
 	}
-	if cfg.Token == "" {
+	if cfg.Auth == nil {
 		return nil, errors.New("a token is required")
 	}
-	switch {
-	case strings.HasPrefix(cfg.Token, APIKeyMarker):
-	case strings.HasPrefix(cfg.Token, AccessTokenMarker):
-		if cfg.WorkspaceID == "" {
-			return nil, errors.New("a user access token needs a workspace id")
-		}
-	default:
-		return nil, errors.New("the token is neither an API key nor a user access token")
+	if !cfg.Auth.boundToAWorkspace() && cfg.WorkspaceID == "" {
+		return nil, errors.New("a user access token needs a workspace id")
 	}
 	transport := &http.Client{Timeout: requestTimeout}
 	return &Client{
 		base:        base,
-		token:       cfg.Token,
+		auth:        cfg.Auth,
 		workspaceID: cfg.WorkspaceID,
 		userAgent:   cfg.UserAgent,
 		retrying:    retrier(transport, maxRetries, checkRetry),
@@ -231,7 +225,11 @@ func (c *Client) send(ctx context.Context, req request) (int, []byte, error) {
 	if err != nil {
 		return 0, nil, fmt.Errorf("build %s %s: %w", req.method, req.path, err)
 	}
-	httpReq.Header.Set("Authorization", "Bearer "+c.token)
+	bearer, err := c.auth.bearer(ctx)
+	if err != nil {
+		return 0, nil, fmt.Errorf("%s %s: %w", req.method, req.path, err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+bearer)
 	httpReq.Header.Set("Accept", "application/json")
 	if c.userAgent != "" {
 		httpReq.Header.Set("User-Agent", c.userAgent)

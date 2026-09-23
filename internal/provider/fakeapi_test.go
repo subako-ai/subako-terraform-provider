@@ -25,6 +25,8 @@ import (
 type fakeAPI struct {
 	mu sync.Mutex
 
+	// bearer is the one token the server takes.
+	bearer      string
 	workspaceID string
 	agents      map[string]*fakeAgent
 	skills      map[string]*fakeSkill
@@ -68,6 +70,7 @@ type fakeProvider struct {
 func newFakeAPI(t *testing.T) (*fakeAPI, *httptest.Server) {
 	t.Helper()
 	api := &fakeAPI{
+		bearer:       "sbk_ak_test",
 		workspaceID:  newID(),
 		agents:       map[string]*fakeAgent{},
 		skills:       map[string]*fakeSkill{},
@@ -149,7 +152,7 @@ var notFound = errBody("not_found", "not found")
 func (a *fakeAPI) serve(w http.ResponseWriter, req *http.Request) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if req.Header.Get("Authorization") != "Bearer sbk_ak_test" {
+	if req.Header.Get("Authorization") != "Bearer "+a.bearer {
 		writeJSON(w, http.StatusUnauthorized, errBody("unauthorized", "bad token"))
 		return
 	}

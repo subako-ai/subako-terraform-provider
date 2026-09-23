@@ -36,47 +36,61 @@ arguments, so no secret is ever written to your state.
 
 ## Installing
 
-The provider is not on the Terraform Registry yet, so `terraform init` will not
-find it on its own. The Subako CLI installs it for you:
+`terraform init` installs it from the Terraform Registry, as it does any other
+provider.
+
+## Authenticating
+
+Signed in with the Subako CLI, there is nothing to set:
 
 ```sh
 subako login --org <your organization>
 subako workspace use <your workspace>
-
-subako terraform init
-subako terraform plan
-subako terraform apply
+terraform apply
 ```
 
-`subako terraform` downloads the release this CLI expects, verifies it against
-the checksums published beside it, and hands Terraform a configuration that
-installs it. Every other provider in your configuration installs as usual. It
-also mints a short-lived API key for the run and revokes it when Terraform
-exits, so there is nothing to rotate afterwards.
+With no token set, the provider runs `subako token` for the signed-in user's
+access token, and runs it again as that nears its expiry, so an apply that
+outlives one token carries on with the next. `$SUBAKO_CLI` names the program
+when `subako` is not on the `PATH`.
 
-## Authenticating
+Each setting is looked for in the provider block, then in its environment
+variable, then from the Subako CLI:
 
-The `provider "subako"` block reads three settings, each falling back to an
-environment variable. `subako terraform` sets all three; a CI job sets them
-itself.
+| Argument | Environment variable | From the Subako CLI | Otherwise |
+| --- | --- | --- | --- |
+| `token` | `SUBAKO_TOKEN` | the signed-in user's access token | — |
+| `server` | `SUBAKO_SERVER` | the server it is signed in to | `https://api.us.cloud.subako.ai` |
+| `workspace_id` | `SUBAKO_WORKSPACE` | the workspace `subako workspace use` selected | — |
 
-| Argument | Environment variable | Meaning |
-| --- | --- | --- |
-| `token` | `SUBAKO_TOKEN` | An API key (`sbk_ak_…`) or a user access token (`sbk_at_…`) |
-| `workspace_id` | `SUBAKO_WORKSPACE` | The workspace to act in. An API key implies its own |
-| `server` | `SUBAKO_SERVER` | The API to reach. Defaults to `https://api.us.cloud.subako.ai` |
+The CLI is asked only when no token is set, so a token from the block or the
+environment never picks up a server or a workspace from it. An API key names
+its own workspace.
 
-In CI, mint an API key with `subako api-key mint` and set it directly:
+### Pin the workspace in a shared configuration
+
+A workspace taken from the CLI follows whatever `subako workspace use` last
+chose, and the provider warns when it takes one. Name it in a configuration
+others apply:
+
+```hcl
+provider "subako" {
+  workspace_id = "01a07f90-..."
+}
+```
+
+### In CI
+
+A job has no login. Mint an API key and set it:
 
 ```sh
 export SUBAKO_TOKEN=sbk_ak_...
-export SUBAKO_WORKSPACE=<workspace id>
 terraform apply -auto-approve
 ```
 
-The key needs the agent, skill, model provider, vault, and credential
-permissions, plus `workspace.read`. It cannot start a session, so a
-configuration can never spend credit.
+Grant it the agent, skill, model provider, vault, and credential permissions,
+plus `workspace.read`. Leave out the session permissions, and the
+configuration cannot spend credit.
 
 ## What you can manage
 
@@ -122,8 +136,33 @@ mise run lint
 mise run fmt
 ```
 
-A tag `v<version>` builds an archive per platform, with a checksum list, and
-publishes them as that tag's release.
+To run a local change through Terraform, build it and point a
+[`dev_overrides`](https://developer.hashicorp.com/terraform/cli/config/config-file#development-overrides-for-provider-developers)
+block at the result:
+
+```sh
+mise run build    # writes bin/terraform-provider-subako
+```
+
+```hcl
+# ~/.terraformrc
+provider_installation {
+  dev_overrides {
+    "subako-ai/subako" = "/path/to/terraform-provider-subako/bin"
+  }
+  direct {}
+}
+```
+
+Terraform then runs that binary with no `terraform init`, and warns on every
+run that it is doing so.
+
+## Releasing
+
+A tag `v<version>` builds, signs, and publishes a release with GoReleaser
+([`.goreleaser.yml`](.goreleaser.yml)), and the Terraform Registry picks it up
+from there. The release is signed with the key in the repository secrets
+`GPG_PRIVATE_KEY` and `PASSPHRASE`, whose public half the registry holds.
 
 ## License
 

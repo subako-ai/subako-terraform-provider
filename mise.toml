@@ -30,6 +30,8 @@ run = ["go vet ./..."]
 description = "Run the provider suite"
 run = ["go test ./..."]
 
+# A binary in bin/ is what a `dev_overrides` block in a Terraform CLI
+# configuration points at to run a local change; see the README.
 [tasks.build]
-description = "Build the release archives into target/"
-run = ["scripts/build.sh"]
+description = "Build the provider into bin/"
+run = ["go build -o bin/ ."]

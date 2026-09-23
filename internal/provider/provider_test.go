@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -1158,6 +1159,41 @@ data "subako_model_providers" "all" {}
 				statecheck.ExpectKnownValue("data.subako_model_providers.all",
 					tfjsonpath.New("providers").AtSliceIndex(0).AtMapKey("models").AtSliceIndex(0).AtMapKey("model"),
 					knownvalue.StringExact("claude-sonnet-5")),
+			},
+		}},
+	})
+}
+
+// With no token set anywhere, the provider asks the Subako CLI, and runs as
+// the signed-in user in the workspace that CLI selected -- through Terraform
+// itself, as `terraform plan` would.
+func TestWithNoTokenTheProviderRunsAsTheSignedInUser(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stand-in CLI is a shell script")
+	}
+	api, server := newFakeAPI(t)
+	api.bearer = "sbk_at_signed_in"
+	cli := filepath.Join(t.TempDir(), "subako")
+	output := fmt.Sprintf(`{"version":1,"server":%q,"access_token":"sbk_at_signed_in",`+
+		`"expires_at":"2099-01-01T00:00:00Z","workspace_id":%q,"workspace_name":"infra"}`,
+		server.URL, api.workspaceID)
+	if err := os.WriteFile(cli, []byte("#!/bin/sh\ncat <<'EOF'\n"+output+"\nEOF\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(envCLI, cli)
+	t.Setenv(envServer, "")
+	t.Setenv(envToken, "")
+	t.Setenv(envWorkspace, "")
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{{
+			Config: `
+provider "subako" {}
+data "subako_workspace" "current" {}
+`,
+			ConfigStateChecks: []statecheck.StateCheck{
+				statecheck.ExpectKnownValue("data.subako_workspace.current", tfjsonpath.New("name"),
+					knownvalue.StringExact("acme")),
 			},
 		}},
 	})

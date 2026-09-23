@@ -3,8 +3,8 @@
 # credentials from.
 #
 #   subako workspace use <name>
-#   subako terraform init
-#   TF_VAR_anthropic_api_key=... TF_VAR_github_token=... subako terraform apply
+#   terraform init
+#   TF_VAR_anthropic_api_key=... TF_VAR_github_token=... terraform apply
 #
 # Neither secret below reaches the state: both are write-only arguments.
 
@@ -23,7 +23,8 @@ terraform {
   }
 }
 
-# `subako terraform` supplies the server, the credential, and the workspace.
+# The signed-in Subako CLI supplies the server, the credential, and the
+# workspace. Name workspace_id here in a configuration others apply.
 provider "subako" {}
 
 variable "anthropic_api_key" {

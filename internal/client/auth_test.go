@@ -31,6 +31,7 @@ func fakeCLI(t *testing.T, output string) (string, func() int) {
 	}
 	body := "#!/bin/sh\n" +
 		"[ \"$1\" = token ] || { echo \"unexpected arguments: $*\" >&2; exit 2; }\n" +
+		"echo \"$*\" >> '" + filepath.Join(dir, "args") + "'\n" +
 		"n=$(cat '" + count + "' 2>/dev/null || echo 0)\n" +
 		"n=$((n + 1))\n" +
 		"echo \"$n\" > '" + count + "'\n" +
@@ -181,5 +182,121 @@ func TestACLIThatWillNotAnswerSaysWhy(t *testing.T) {
 				t.Fatalf("err = %v, want it to mention %q", err, tc.want)
 			}
 		})
+	}
+}
+
+// A refusal is answered by asking the CLI with --renew -- once, however many
+// requests were refused together: the first renews, and the rest find the
+// token they were refused is no longer the one in hand.
+func TestARefusedTokenIsRenewedOnce(t *testing.T) {
+	program, runs := fakeCLI(t, `{"version":1,"server":"https://api.example.test",`+
+		`"access_token":"sbk_at_%d","expires_at":"2030-01-01T00:00:00Z"}`)
+	auth := &cliAuth{
+		program: program,
+		now:     time.Now,
+		issued: Issued{Server: "https://api.example.test", AccessToken: "sbk_at_0",
+			ExpiresAt: time.Now().Add(time.Hour)},
+	}
+
+	for range 3 {
+		renewed, err := auth.renew(context.Background(), "sbk_at_0")
+		if err != nil || !renewed {
+			t.Fatalf("renewed = %v, %v", renewed, err)
+		}
+	}
+	if runs() != 1 || auth.issued.AccessToken != "sbk_at_1" {
+		t.Fatalf("the CLI ran %d times, token %q", runs(), auth.issued.AccessToken)
+	}
+	args, err := os.ReadFile(filepath.Join(filepath.Dir(program), "args"))
+	if err != nil || strings.TrimSpace(string(args)) != "token --renew" {
+		t.Fatalf("the CLI was asked %q: %v", args, err)
+	}
+
+	static, _ := Static("sbk_ak_x")
+	if renewed, _ := static.renew(context.Background(), "sbk_ak_x"); renewed {
+		t.Fatal("a token the operator named has none to fall back on")
+	}
+}
+
+// tokens is authentication that answers the next of its tokens each time a
+// request asks, and renews to the one after.
+type tokens struct {
+	mu   sync.Mutex
+	next []string
+}
+
+func (s *tokens) bearer(context.Context) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	token := s.next[0]
+	if len(s.next) > 1 {
+		s.next = s.next[1:]
+	}
+	return token, nil
+}
+
+func (s *tokens) renew(context.Context, string) (bool, error) { return true, nil }
+
+func (s *tokens) boundToAWorkspace() bool { return true }
+
+// A request the server refuses is sent once more with the renewed token, and
+// as the same operation: a POST keeps its idempotency key.
+func TestARefusedRequestIsSentOnceMoreAsTheSameOperation(t *testing.T) {
+	var mu sync.Mutex
+	var seen []http.Header
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen = append(seen, r.Header.Clone())
+		mu.Unlock()
+		if r.Header.Get("Authorization") == "Bearer sbk_ak_old" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"error":{"code":"unauthorized","message":"bad token"}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"id":"a1"}`)
+	}))
+	defer server.Close()
+	c, err := New(Config{Server: server.URL, Auth: &tokens{next: []string{"sbk_ak_old", "sbk_ak_new"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.CreateAgent(context.Background(), "n"); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 2 || seen[1].Get("Authorization") != "Bearer sbk_ak_new" {
+		t.Fatalf("requests = %d, last bearer %q", len(seen), seen[len(seen)-1].Get("Authorization"))
+	}
+	if key := seen[0].Get("Idempotency-Key"); key == "" || seen[1].Get("Idempotency-Key") != key {
+		t.Fatalf("keys = %q, %q", seen[0].Get("Idempotency-Key"), seen[1].Get("Idempotency-Key"))
+	}
+}
+
+// A retry presents the token auth answers when it goes out, not the one its
+// first attempt carried, which may have lapsed during the wait.
+func TestARetryPresentsTheTokenOfItsOwnMoment(t *testing.T) {
+	var mu sync.Mutex
+	var bearers []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		bearers = append(bearers, r.Header.Get("Authorization"))
+		first := len(bearers) == 1
+		mu.Unlock()
+		if first {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = io.WriteString(w, `{"id":"a1"}`)
+	}))
+	defer server.Close()
+	c, err := New(Config{Server: server.URL, Auth: &tokens{next: []string{"sbk_ak_1", "sbk_ak_2"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.retrying.RetryWaitMin, c.retrying.RetryWaitMax = 0, 0
+	if _, err := c.CreateAgent(context.Background(), "n"); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"Bearer sbk_ak_1", "Bearer sbk_ak_2"}; strings.Join(bearers, ",") != strings.Join(want, ",") {
+		t.Fatalf("bearers = %v, want %v", bearers, want)
 	}
 }

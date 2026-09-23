@@ -17,6 +17,9 @@ import (
 // unexported, so the two kinds below are the only ones there are.
 type Auth interface {
 	bearer(ctx context.Context) (string, error)
+	// renew answers whether a request refused with `refused` is worth sending
+	// again: true once a token other than `refused` is ready to present.
+	renew(ctx context.Context, refused string) (bool, error)
 	// boundToAWorkspace reports whether the server reads the workspace from
 	// the token itself, as it does for an API key, so a request needs
 	// none named beside it.
@@ -45,6 +48,10 @@ func Static(token string) (Auth, error) {
 }
 
 func (s staticAuth) bearer(context.Context) (string, error) { return s.token, nil }
+
+// A token the operator named has no other to fall back on: its refusal is
+// the answer.
+func (staticAuth) renew(context.Context, string) (bool, error) { return false, nil }
 
 func (s staticAuth) boundToAWorkspace() bool { return s.apiKey }
 
@@ -82,10 +89,10 @@ type cliAuth struct {
 	issued Issued
 }
 
-// AskCLI runs `program token`, and answers what it printed with a credential
-// that asks again as the token nears its expiry.
+// AskCLI runs `program token`, and answers what it printed with
+// authentication that asks again as the token nears its expiry.
 func AskCLI(ctx context.Context, program string) (Issued, Auth, error) {
-	issued, err := runCLI(ctx, program)
+	issued, err := runCLI(ctx, program, false)
 	if err != nil {
 		return Issued{}, nil, err
 	}
@@ -98,25 +105,55 @@ func (c *cliAuth) bearer(ctx context.Context) (string, error) {
 	if c.issued.ExpiresAt.Sub(c.now()) > renewalMargin {
 		return c.issued.AccessToken, nil
 	}
-	issued, err := runCLI(ctx, c.program)
-	if err != nil {
+	if err := c.ask(ctx, false); err != nil {
 		return "", err
+	}
+	return c.issued.AccessToken, nil
+}
+
+// renew asks the CLI for a new token after the server refused `refused`,
+// which its stored expiry can still call live after the grant was revoked or
+// the clock moved. Requests refused together ask once: the first to get here
+// renews, and the rest find a token other than the one they were refused.
+func (c *cliAuth) renew(ctx context.Context, refused string) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.issued.AccessToken != refused {
+		return true, nil
+	}
+	if err := c.ask(ctx, true); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// ask runs the CLI and keeps what it answers. The caller holds c.mu.
+func (c *cliAuth) ask(ctx context.Context, renew bool) error {
+	issued, err := runCLI(ctx, c.program, renew)
+	if err != nil {
+		return err
 	}
 	// A token for another server would be refused there: the run was
 	// configured against the one it started with.
 	if issued.Server != c.issued.Server {
-		return "", fmt.Errorf("the Subako CLI is signed in to %s now, not %s as when the run began",
+		return fmt.Errorf("the Subako CLI is signed in to %s now, not %s as when the run began",
 			issued.Server, c.issued.Server)
 	}
 	c.issued = issued
-	return issued.AccessToken, nil
+	return nil
 }
 
 func (c *cliAuth) boundToAWorkspace() bool { return false }
 
-func runCLI(ctx context.Context, program string) (Issued, error) {
+// runCLI runs `program token`, with `--renew` when `renew` asks the CLI to
+// mint a token whatever the stored one has left.
+func runCLI(ctx context.Context, program string, renew bool) (Issued, error) {
+	args := []string{"token"}
+	if renew {
+		args = append(args, "--renew")
+	}
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, program, "token")
+	cmd := exec.CommandContext(ctx, program, args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

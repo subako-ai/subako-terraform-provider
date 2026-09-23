@@ -80,14 +80,14 @@ func New(cfg Config) (*Client, error) {
 		auth:        cfg.Auth,
 		workspaceID: cfg.WorkspaceID,
 		userAgent:   cfg.UserAgent,
-		retrying:    retrier(transport, maxRetries, checkRetry),
-		once:        retrier(transport, 0, checkOnce),
+		retrying:    retrier(transport, maxRetries, checkRetry, cfg.Auth),
+		once:        retrier(transport, 0, checkOnce, cfg.Auth),
 	}, nil
 }
 
 // retrier is the retry library under one policy. Both clients share the
 // transport, so they share its connection pool.
-func retrier(transport *http.Client, retries int, check retryablehttp.CheckRetry) *retryablehttp.Client {
+func retrier(transport *http.Client, retries int, check retryablehttp.CheckRetry, auth Auth) *retryablehttp.Client {
 	return &retryablehttp.Client{
 		HTTPClient:   transport,
 		RetryWaitMin: retryWaitMin,
@@ -98,6 +98,11 @@ func retrier(transport *http.Client, retries int, check retryablehttp.CheckRetry
 		// The last response answers the call, so its body still decodes into
 		// the error envelope rather than "giving up after N attempts".
 		ErrorHandler: retryablehttp.PassthroughErrorHandler,
+		// A retry can go out after the token its first attempt carried has
+		// lapsed, so each one presents the token auth answers then.
+		PrepareRetry: func(req *http.Request) error {
+			return present(req.Context(), auth, req.Header)
+		},
 	}
 }
 
@@ -211,9 +216,43 @@ func (c *Client) do(ctx context.Context, req request, out any) error {
 	return nil
 }
 
-// send makes one call, retried under its method's policy. The request is
-// built once, so every attempt carries the same headers and the same body.
+// present sets the bearer a request carries to the one auth answers now.
+func present(ctx context.Context, auth Auth, header http.Header) error {
+	bearer, err := auth.bearer(ctx)
+	if err != nil {
+		return err
+	}
+	header.Set("Authorization", "Bearer "+bearer)
+	return nil
+}
+
+// send makes one call, retried under its method's policy, and sends it once
+// more when the server refuses the token it carried and auth has another to
+// present. Every attempt carries the same body, and a POST the same
+// idempotency key, so a call sent twice is one operation to the server.
 func (c *Client) send(ctx context.Context, req request) (int, []byte, error) {
+	var key string
+	if req.method == http.MethodPost {
+		key = newIdempotencyKey()
+	}
+	status, payload, presented, err := c.attempt(ctx, req, key)
+	if err != nil || status != http.StatusUnauthorized {
+		return status, payload, err
+	}
+	renewed, err := c.auth.renew(ctx, presented)
+	if err != nil {
+		return 0, nil, fmt.Errorf("%s %s: %w", req.method, req.path, err)
+	}
+	if !renewed {
+		return status, payload, nil
+	}
+	status, payload, _, err = c.attempt(ctx, req, key)
+	return status, payload, err
+}
+
+// attempt sends req under its method's retry policy, and answers what the
+// server said with the token the last attempt presented.
+func (c *Client) attempt(ctx context.Context, req request, key string) (int, []byte, string, error) {
 	target := c.base.JoinPath(req.path)
 	if len(req.query) > 0 {
 		target.RawQuery = req.query.Encode()
@@ -224,13 +263,11 @@ func (c *Client) send(ctx context.Context, req request) (int, []byte, error) {
 	}
 	httpReq, err := retryablehttp.NewRequestWithContext(ctx, req.method, target.String(), body)
 	if err != nil {
-		return 0, nil, fmt.Errorf("build %s %s: %w", req.method, req.path, err)
+		return 0, nil, "", fmt.Errorf("build %s %s: %w", req.method, req.path, err)
 	}
-	bearer, err := c.auth.bearer(ctx)
-	if err != nil {
-		return 0, nil, fmt.Errorf("%s %s: %w", req.method, req.path, err)
+	if err := present(ctx, c.auth, httpReq.Header); err != nil {
+		return 0, nil, "", fmt.Errorf("%s %s: %w", req.method, req.path, err)
 	}
-	httpReq.Header.Set("Authorization", "Bearer "+bearer)
 	httpReq.Header.Set("Accept", "application/json")
 	if c.userAgent != "" {
 		httpReq.Header.Set("User-Agent", c.userAgent)
@@ -244,24 +281,24 @@ func (c *Client) send(ctx context.Context, req request) (int, []byte, error) {
 	if c.workspaceID != "" {
 		httpReq.Header.Set(workspaceHeader, c.workspaceID)
 	}
-	// One key per logical call, reused by its retries, so a repeated POST is
-	// one operation to the server.
-	if req.method == http.MethodPost {
-		httpReq.Header.Set(idempotencyHeader, newIdempotencyKey())
+	if key != "" {
+		httpReq.Header.Set(idempotencyHeader, key)
 	}
 
 	res, err := c.httpFor(req.method).Do(httpReq)
 	if res != nil {
 		defer res.Body.Close()
 	}
+	// The header as the last attempt sent it: PrepareRetry may have renewed it.
+	presented := strings.TrimPrefix(httpReq.Header.Get("Authorization"), "Bearer ")
 	if err != nil {
-		return 0, nil, fmt.Errorf("%s %s: %w", req.method, req.path, err)
+		return 0, nil, presented, fmt.Errorf("%s %s: %w", req.method, req.path, err)
 	}
 	payload, err := io.ReadAll(res.Body)
 	if err != nil {
-		return 0, nil, fmt.Errorf("read %s %s response: %w", req.method, req.path, err)
+		return 0, nil, presented, fmt.Errorf("read %s %s response: %w", req.method, req.path, err)
 	}
-	return res.StatusCode, payload, nil
+	return res.StatusCode, payload, presented, nil
 }
 
 func decodeError(status int, body []byte) error {

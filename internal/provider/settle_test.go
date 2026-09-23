@@ -137,15 +137,51 @@ func TestAWorkspaceNamedBeforeTheCLIWins(t *testing.T) {
 	}
 }
 
-func TestAServerNamedBeforeTheCLIWins(t *testing.T) {
+// A token the operator set goes to whichever server they named, from the
+// block or the environment. The CLI's token is for the one server it signed
+// in to, and a server named for it that is another one is refused rather
+// than sent the token.
+func TestOnlyTheCLIsTokenIsHeldToItsServer(t *testing.T) {
+	for name, tc := range map[string]struct {
+		config providerModel
+		vars   map[string]string
+		server string // "" when settle refuses
+	}{
+		"the environment's token, the block's server": {
+			block(ptr("https://staging.example.test"), nil, nil),
+			map[string]string{envToken: "sbk_ak_env"}, "https://staging.example.test"},
+		"the block's token, the environment's server": {
+			block(nil, ptr("sbk_ak_block"), nil),
+			map[string]string{envServer: "https://staging.example.test"}, "https://staging.example.test"},
+		"the block's server over the environment's": {
+			block(ptr("https://block.example.test"), nil, nil),
+			map[string]string{envToken: "sbk_ak_env", envServer: "https://env.example.test"}, "https://block.example.test"},
+		"the CLI's token, another server in the environment": {
+			block(nil, nil, nil), map[string]string{envServer: "https://staging.example.test"}, ""},
+		"the CLI's token, another server in the block": {
+			block(ptr("https://staging.example.test"), nil, nil), nil, ""},
+		"the CLI's token, its own server named again": {
+			block(nil, nil, nil), map[string]string{envServer: "https://api.example.test/"}, "https://api.example.test"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cli := &signedIn{server: "https://api.example.test"}
+			settings, diags := settle(context.Background(), tc.config, env(tc.vars), cli.ask)
+			switch {
+			case tc.server == "" && (!diags.HasError() || diags.Errors()[0].Summary() != "Server does not match the Subako CLI's login"):
+				t.Fatalf("want a refusal, got %v", diags)
+			case tc.server != "" && (diags.HasError() || settings.Server != tc.server):
+				t.Fatalf("server = %q, diags = %v, want %q", settings.Server, diags, tc.server)
+			}
+		})
+	}
+}
+
+func TestSubakoCLINamesTheProgramAsked(t *testing.T) {
 	cli := &signedIn{server: "https://api.example.test"}
 	settings, _ := settle(context.Background(), block(nil, nil, nil),
-		env(map[string]string{envServer: "https://env.example.test", envCLI: "/opt/subako/bin/subako"}), cli.ask)
-	if settings.Server != "https://env.example.test" {
-		t.Fatalf("server = %q", settings.Server)
-	}
-	if cli.program != "/opt/subako/bin/subako" {
-		t.Fatalf("$SUBAKO_CLI names the program asked: %q", cli.program)
+		env(map[string]string{envCLI: "/opt/subako/bin/subako"}), cli.ask)
+	if cli.program != "/opt/subako/bin/subako" || settings.Server != "https://api.example.test" {
+		t.Fatalf("program = %q, server = %q", cli.program, settings.Server)
 	}
 }
 

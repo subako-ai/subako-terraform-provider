@@ -50,22 +50,23 @@ terraform apply
 ```
 
 With no token set, the provider runs `subako token` for the signed-in user's
-access token, and runs it again as that nears its expiry, so an apply that
-outlives one token carries on with the next. `$SUBAKO_CLI` names the program
-when `subako` is not on the `PATH`.
+access token, and runs it again as that nears its expiry, or with `--renew` if
+the server refuses it, so an apply that outlives one token carries on with the
+next. `$SUBAKO_CLI` names the program when `subako` is not on the `PATH`.
 
 Each setting is looked for in the provider block, then in its environment
-variable, then from the Subako CLI:
+variable:
 
-| Argument | Environment variable | From the Subako CLI | Otherwise |
-| --- | --- | --- | --- |
-| `token` | `SUBAKO_TOKEN` | the signed-in user's access token | — |
-| `server` | `SUBAKO_SERVER` | the server it is signed in to | `https://api.us.cloud.subako.ai` |
-| `workspace_id` | `SUBAKO_WORKSPACE` | the workspace `subako workspace use` selected | — |
+| Argument | Environment variable | When neither sets it |
+| --- | --- | --- |
+| `token` | `SUBAKO_TOKEN` | the signed-in Subako CLI's |
+| `server` | `SUBAKO_SERVER` | `https://api.us.cloud.subako.ai`, or the CLI's server |
+| `workspace_id` | `SUBAKO_WORKSPACE` | the workspace `subako workspace use` selected |
 
-The CLI is asked only when no token is set, so a token from the block or the
-environment never picks up a server or a workspace from it. An API key names
-its own workspace.
+A token you set goes to whichever server you name. The Subako CLI's token is
+for the one server it signed in to, so with no token set, a `server` naming
+another one is refused rather than sent the CLI's token. An API key names its
+own workspace.
 
 ### Pin the workspace in a shared configuration
 

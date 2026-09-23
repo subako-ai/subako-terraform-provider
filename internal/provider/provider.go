@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -62,15 +63,16 @@ func (p *subakoProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 		Attributes: map[string]schema.Attribute{
 			"server": schema.StringAttribute{
 				Optional: true,
-				Description: "The Subako API base URL. Defaults to `$SUBAKO_SERVER`, then the server the " +
-					"Subako CLI is signed in to when the token comes from it, then " + DefaultServer + ".",
+				Description: "The Subako API base URL. Defaults to `$SUBAKO_SERVER`, then " + DefaultServer +
+					". With no token set, the Subako CLI's token is used, and this must be the server it " +
+					"signed in to or be left unset.",
 			},
 			"token": schema.StringAttribute{
 				Optional:  true,
 				Sensitive: true,
 				Description: "An API key (`sbk_ak_...`) or a user access token (`sbk_at_...`). " +
 					"Defaults to `$SUBAKO_TOKEN`, then the signed-in user's, which the Subako CLI's " +
-					"`subako token` answers and renews as it nears expiry.",
+					"`subako token` answers and renews as it nears expiry or when the server refuses it.",
 			},
 			"workspace_id": schema.StringAttribute{
 				Optional: true,
@@ -116,14 +118,15 @@ func resolve(value types.String, env string, getenv environment) (string, origin
 }
 
 // settle resolves the provider block into what a client needs, each argument
-// looked for in turn: in the block, then in the environment, then -- when
-// the token comes from the signed-in user -- from the Subako CLI.
+// looked for in the block, then in the environment. A token set in either is
+// the operator's, and goes to whichever server they named, the default when
+// they named none. With no token set, the signed-in Subako CLI supplies the
+// token and the server together: its login is for that server alone, so a
+// server named for it that is another one is refused rather than sent the
+// token. The workspace is looked for in the same order, then from the CLI.
 func settle(ctx context.Context, config providerModel, getenv environment, ask askCLI) (client.Config, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	server, serverFrom := resolve(config.Server, envServer, getenv)
-	if serverFrom == unset {
-		server = DefaultServer
-	}
 	token, tokenFrom := resolve(config.Token, envToken, getenv)
 	workspaceID, workspaceFrom := resolve(config.WorkspaceID, envWorkspace, getenv)
 
@@ -136,6 +139,9 @@ func settle(ctx context.Context, config providerModel, getenv environment, ask a
 			return client.Config{}, diags
 		}
 		auth = static
+		if serverFrom == unset {
+			server = DefaultServer
+		}
 	case unset:
 		program := getenv(envCLI)
 		if program == "" {
@@ -148,10 +154,16 @@ func settle(ctx context.Context, config providerModel, getenv environment, ask a
 					"for the signed-in user's: "+err.Error())
 			return client.Config{}, diags
 		}
-		auth = cliAuth
-		if serverFrom == unset {
-			server = issued.Server
+		if serverFrom != unset && strings.TrimRight(server, "/") != strings.TrimRight(issued.Server, "/") {
+			where := map[origin]string{fromConfig: "the block's server", fromEnv: "$" + envServer}[serverFrom]
+			diags.AddError("Server does not match the Subako CLI's login",
+				fmt.Sprintf("No token is set, so the token is the Subako CLI's, which is for %s; but %s "+
+					"names %s. The CLI's token goes only to the server it signed in to: drop the server, "+
+					"or set a token for %s.", issued.Server, where, server, server))
+			return client.Config{}, diags
 		}
+		auth = cliAuth
+		server = issued.Server
 		if workspaceFrom == unset && issued.WorkspaceID != "" {
 			workspaceID = issued.WorkspaceID
 			diags.AddAttributeWarning(path.Root("workspace_id"), "Workspace taken from the Subako CLI",
